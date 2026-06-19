@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: sl-compliance-agent
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Persist gazettes and vectorstore outside the container
+      - ./data/gazettes:/app/data/gazettes
+      - ./data/vectorstore:/app/data/vectorstore
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

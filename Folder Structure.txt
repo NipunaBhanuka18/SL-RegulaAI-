@@ -1,0 +1,57 @@
+sl-compliance-agent/
+│
+├── main.py
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── README.md
+├── Dockerfile                        # ← NEW: container build
+├── docker-compose.yml                # ← NEW: volume mounts + healthcheck
+│
+├── app/
+│   ├── core/
+│   │   ├── config.py
+│   │   └── logging.py
+│   │
+│   ├── schemas/
+│   │   ├── document.py
+│   │   ├── query.py
+│   │   └── response.py
+│   │
+│   ├── ingestion/
+│   │   ├── loader.py
+│   │   ├── chunker.py
+│   │   └── embedder.py
+│   │
+│   ├── retrieval/
+│   │   ├── vectorstore.py
+│   │   └── retriever.py
+│   │
+│   ├── pipeline/
+│   │   ├── prompts.py                # ← NEW: all system prompts centralised
+│   │   ├── graph/
+│   │   │   ├── state.py
+│   │   │   └── builder.py
+│   │   └── nodes/
+│   │       ├── retriever.py
+│   │       ├── grader.py             # now imports from prompts.py
+│   │       ├── query_rewriter.py     # now imports from prompts.py
+│   │       ├── generator.py          # now imports from prompts.py
+│   │       └── hallucination_checker.py  # renamed comment → "Groundedness checker"
+│   │
+│   └── api/routes/
+│       ├── health.py
+│       ├── query.py
+│       └── ingest.py
+│
+├── data/
+│   ├── gazettes/
+│   └── vectorstore/
+│
+├── scripts/
+│   ├── ingest_gazettes.py
+│   └── reset_vectorstore.py
+│
+└── tests/
+    ├── unit/
+    └── integration/
