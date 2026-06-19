@@ -219,7 +219,7 @@ Conversation state is stored externally using PostgreSQL-based persistence.
 
 # 📸 Screenshots
 
-_Add frontend screenshots and architecture diagrams here._
+_WILL UPDATE SOON._
 
 ---
 
