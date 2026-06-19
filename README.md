@@ -1,149 +1,315 @@
 # ⚖️ SL-RegulaAI
 
-**An agentic, context-aware compliance assistant for Sri Lankan tax and regulatory law.**
+### An Agentic RAG-based compliance assistant for Sri Lankan tax and regulatory documents.
 
-SL-RegulaAI is a Corrective RAG (CRAG) system built on a deterministic LangGraph state machine. It ingests Sri Lankan IRD gazettes and tax regulations, resolves multi-turn conversational context, and strictly grounds every response in verified legal text — refusing to answer rather than hallucinating.
+SL-RegulaAI is a context-aware AI assistant that helps users query Sri Lankan regulatory documents such as IRD gazettes and tax-related publications.
+
+The system uses a retrieval-grounded AI workflow to find relevant legal information, maintain conversation context, verify retrieved sources, and generate responses with citations instead of relying on unsupported model outputs.
 
 ---
 
 ## Why this exists
 
-Mid-sized businesses and financial departments in Sri Lanka lose hours tracking shifting VAT thresholds, tax amendments, and labour compliance laws buried in dense gazette PDFs. Manual research is slow and exposes companies to audit risk. SL-RegulaAI turns that research into a conversation — with every answer traceable back to an exact gazette and page number.
+Tax and regulatory information changes frequently. Important updates are often buried inside long government PDF documents, making manual searching slow and inefficient.
+
+SL-RegulaAI explores how AI can simplify this process by turning regulatory research into a conversational experience:
+
+**User asks a compliance question → system retrieves relevant documents → AI generates a source-grounded response.**
+
+The goal is not to replace professional legal advice, but to demonstrate how AI systems can improve access to complex regulatory information.
 
 ---
 
-## Architecture
+# 🏗️ Architecture
 
-Unlike a standard linear RAG pipeline, SL-RegulaAI routes every query through a deterministic graph rather than a single black-box LLM call. Each stage can independently retry, reject, or halt execution.
+Unlike a simple "retrieve → generate" RAG pipeline, SL-RegulaAI uses a LangGraph workflow to add additional control steps around retrieval and generation.
 
 ```
-                                ┌───────────────────────┐
-                                │     User follow-up      │
-                                │  "Is their number          │
-                                │    mandatory?"               │
-                                └───────────┬───────────┘
-                                            │
-                               ┌────────────▼────────────┐
-                               │  Context-Aware Rewriter    │
-                               │     (Memory Bridge)          │
-                               │  pulls history from Neon     │
-                               │  Postgres via thread_id      │
-                               └────────────┬────────────┘
-                                            │
-                        "Is a private company registration
-                         number mandatory for VAT filing?"
-                                            │
-                               ┌────────────▼────────────┐
-                               │         Retriever            │
-                               │   pgvector similarity search  │
-                               └────────────┬────────────┘
-                                            │
-                        ┌──────────────────►│
-                        │          ┌────────▼────────┐
-                        │          │ Dual-Clause Legal  │
-                        │          │   Grader Node        │
-                        │          └────────┬────────┘
-                        │                   │
-                 rewrite & retry     relevant?  not relevant →
-                        │                   │     blocks generation
-                        └───────────────────┤     (no hallucination)
-                                            │
-                               ┌────────────▼────────────┐
-                               │          Generator           │
-                               │    cited, grounded answer     │
-                               └────────────┬────────────┘
-                                            │
-                               ┌────────────▼────────────┐
-                               │  Recursion Circuit Breaker   │
-                               │   5 failed loops → halt UI,   │
-                               │   trigger human-in-the-loop   │
-                               └────────────┬────────────┘
-                                            │
-                                ┌───────────▼───────────┐
-                                │   Response + citations   │
-                                │   + telemetry metadata    │
-                                └───────────────────────┘
+User Query
+    |
+    ▼
+FastAPI Backend
+    |
+    ▼
+Context-Aware Query Rewriter
+    |
+    ▼
+pgvector Retrieval
+    |
+    ▼
+Document Relevance Grader
+    |
+    ▼
+LLM Generation
+    |
+    ▼
+Source Verification
+    |
+    ▼
+Response + Citations
 ```
+
+The workflow handles:
+
+- conversation context resolution
+- retrieval quality checking
+- grounded response generation
+- failure handling for unsupported queries
 
 ---
 
-## Technology stack
+# 🔄 How the workflow works
+
+## 1. Context-aware query rewriting
+
+Multi-turn conversations create a common RAG problem:
+
+Example:
+
+User:
+> "Is their number mandatory?"
+
+A normal RAG system may not understand what "their" refers to.
+
+SL-RegulaAI uses conversation history to rewrite vague follow-up questions into standalone queries before retrieval.
+
+Example:
+
+```
+"Is their number mandatory?"
+
+↓
+
+"Is the private company registration number mandatory for VAT filing?"
+```
+
+This improves retrieval consistency across conversations.
+
+---
+
+## 2. Retrieval with pgvector
+
+Regulatory documents are:
+
+- extracted from PDFs
+- split into meaningful chunks
+- converted into embeddings
+- stored with metadata
+
+The system retrieves relevant sections using vector similarity search.
+
+Stored information includes:
+
+- document source
+- metadata
+- page references
+
+---
+
+## 3. Retrieval quality checking
+
+Before generating an answer, retrieved documents are evaluated.
+
+If the retrieved context does not sufficiently match the question, the workflow can attempt another retrieval path instead of immediately generating a response.
+
+---
+
+## 4. Grounded response generation
+
+The LLM generates answers using retrieved regulatory context.
+
+Responses include source references to improve transparency and verification.
+
+---
+
+# 🛠️ Technology Stack
 
 | Layer | Technology |
 |---|---|
-| AI orchestration | LangGraph, LangChain, Groq API (Llama 3.1 8B / 70B) |
-| Embeddings & search | HuggingFace `all-MiniLM-L6-v2`, pgvector |
-| Database & memory | Neon Serverless PostgreSQL |
-| Backend API | FastAPI, Pydantic |
-| Frontend | Next.js, React, Tailwind CSS, React Markdown |
-| Data processing | PyPDF, `RecursiveCharacterTextSplitter` |
+| AI Workflow | LangGraph, LangChain |
+| LLM | Groq API (Llama 3.1) |
+| Embeddings | HuggingFace all-MiniLM-L6-v2 |
+| Vector Database | PostgreSQL + pgvector |
+| Database Hosting | Neon Serverless PostgreSQL |
+| Backend | FastAPI, Pydantic |
+| Frontend | Next.js, React, Tailwind CSS |
+| Document Processing | PyPDF, RecursiveCharacterTextSplitter |
 
 ---
 
-## Core engineering features
+# 🚀 Core Features
 
-### Context-aware query rewriting (the memory bridge)
-Follow-up questions are intercepted before they ever reach the vector database. A dedicated graph node pulls conversational history from Postgres and rewrites vague references into fully resolved, standalone queries — turning *"Is their number mandatory?"* into *"Is a private company registration number mandatory for VAT filing?"*
+## ✅ Multi-turn conversation support
 
-### Deterministic CRAG state machine
-Rather than a single opaque LLM call, every query passes through an explicit LangGraph workflow. A **Dual-Clause Legal Grader** node evaluates retrieved chunks against the query — if the legal text doesn't contain the answer, the graph blocks generation outright instead of letting the model guess.
-
-### Automated batch ingestion pipeline
-`ingest_data.py` scans a directory for government PDFs, chunks them (1000 characters, 200 overlap) with metadata auto-extracted from filenames, computes embeddings locally, and streams the payload to Postgres — fully decoupled from the API layer.
-
-### Telemetry & observability
-Every query response includes exact token consumption, millisecond latency, the internal graph execution path (which nodes fired), and raw citation metadata — exposed to the Next.js frontend for user-facing verification.
+Maintains conversation state using persistent storage and resolves follow-up questions before retrieval.
 
 ---
 
-## Engineering challenges solved
+## ✅ Citation-based responses
 
-**Multi-turn context drift.** Standard RAG breaks on pronoun resolution across conversational turns. The query-rewriting node stabilises entity references upstream, measurably improving retrieval precision on follow-up questions.
-
-**Infinite LLM retry loops.** A failed grading check can trigger endless retries in agentic workflows. A strict `GraphRecursionError` circuit breaker halts execution after 5 failed loops, safely locking the UI and escalating to a human-in-the-loop fallback rather than spinning forever.
-
-**Unpredictable vector metadata.** The vector store occasionally returned inconsistent `GazetteMetadata` shapes, causing silent 500 errors. Polymorphic extraction logic (`isinstance`, `hasattr` checks) now parses metadata defensively regardless of schema drift.
-
-**Stateless-to-stateful routing.** The FastAPI server itself stays fully stateless for horizontal scalability — all conversation memory persists externally to Neon Postgres checkpointers, keyed by unique `thread_id`.
+Generated answers are linked back to retrieved document sources for easier verification.
 
 ---
 
-## Getting started
+## ✅ Automated document ingestion
 
-```bash
-# 1. Clone and install
-git clone https://github.com/<your-username>/sl-regulaai.git
-cd sl-regulaai
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+PDF documents can be processed through an ingestion pipeline:
 
-# 2. Configure environment
-cp .env.example .env
-# Add your GROQ_API_KEY and Neon DATABASE_URL
-
-# 3. Ingest gazette PDFs
-# Place IRD gazette PDFs in ./data/gazettes/, then:
-python scripts/ingest_data.py
-
-# 4. Run the API
-python main.py
-# Interactive docs → http://localhost:8000/docs
+```
+PDF
+ ↓
+Text Extraction
+ ↓
+Chunking
+ ↓
+Embedding Generation
+ ↓
+Vector Storage
 ```
 
 ---
 
-## Roadmap
+## ✅ Workflow-based AI architecture
 
-- **Evaluation pipeline** — a 50-question "golden dataset" of edge-case compliance queries to systematically track context precision, answer relevance, and semantic similarity.
-- **Streaming responses** — upgrading FastAPI endpoints to Server-Sent Events for token-by-token UI streaming.
-
----
-
-## Where to get gazette PDFs
-
-- [Department of Government Printing](http://www.documents.gov.lk)
-- [Inland Revenue Department Sri Lanka](https://www.ird.gov.lk)
+Instead of a single LLM call, the system uses a structured graph workflow where each step has a specific responsibility.
 
 ---
 
-Built by Bhanuka — 2nd year AI undergraduate, SLIIT, first AI specialisation batch in Sri Lanka.
+# 🧩 Engineering Challenges
+
+## Context drift in multi-turn RAG
+
+Problem:
+Follow-up questions often depend on previous messages.
+
+Solution:
+Implemented a query rewriting step that converts conversational references into complete searchable queries.
+
+---
+
+## Retrieval reliability
+
+Problem:
+A language model may generate answers from incomplete context.
+
+Solution:
+Added retrieval evaluation steps before final response generation.
+
+---
+
+## Handling failed workflows
+
+Problem:
+AI workflows with retries can continue indefinitely.
+
+Solution:
+Implemented workflow limits and failure handling to prevent endless execution attempts.
+
+---
+
+## Managing conversation state
+
+Problem:
+APIs are easier to scale when they remain stateless.
+
+Solution:
+Conversation state is stored externally using PostgreSQL-based persistence.
+
+---
+
+# 📸 Screenshots
+
+_Add frontend screenshots and architecture diagrams here._
+
+---
+
+# ⚙️ Getting Started
+
+## Clone repository
+
+```bash
+git clone https://github.com/<your-username>/SL-RegulaAI.git
+
+cd SL-RegulaAI
+```
+
+---
+
+## Install dependencies
+
+```bash
+python -m venv venv
+
+source venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+---
+
+## Environment Setup
+
+Create `.env`
+
+```
+GROQ_API_KEY=
+DATABASE_URL=
+```
+
+---
+
+## Document ingestion
+
+Place regulatory PDFs inside:
+
+```
+data/gazettes/
+```
+
+Run:
+
+```bash
+python scripts/ingest_data.py
+```
+
+---
+
+## Start backend
+
+```bash
+python main.py
+```
+
+API documentation:
+
+```
+http://localhost:8000/docs
+```
+
+---
+
+# 🛣️ Future Improvements
+
+- Build a structured evaluation dataset for RAG testing
+- Add automated retrieval and answer quality metrics
+- Improve document classification and routing
+- Add streaming responses
+- Expand regulatory document coverage
+
+---
+
+# 📚 Sources for documents
+
+Sri Lankan government documents:
+
+- Department of Government Printing  
+https://www.documents.gov.lk
+
+- Inland Revenue Department Sri Lanka  
+https://www.ird.gov.lk
+
+---
+
+Built by **Bhanuka**  
+AI Undergraduate — SLIIT 🇱🇰  
+First AI Specialisation Batch in SLIIT
